@@ -1,0 +1,118 @@
+{
+  "name": "Multimodal RAG Offline Workflow",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "File Upload",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "http://localhost:5000/upload",
+        "method": "POST"
+      },
+      "typeVersion": 1,
+      "position": [250, 200]
+    },
+    {
+      "id": "2",
+      "name": "Extract Text (PDF/DOCX)",
+      "type": "n8n-nodes-base.python",
+      "parameters": {
+        "functionCode": "import textract, sys\nfile_path = $json['file_path']\n\nif file_path.endswith('.pdf'):\n    from pdfminer.high_level import extract_text\n    text = extract_text(file_path)\nelif file_path.endswith('.docx'):\n    import docx\n    doc = docx.Document(file_path)\n    text = '\\n'.join([p.text for p in doc.paragraphs])\nelse:\n    text = ''\nreturn {'data': text}"
+      },
+      "typeVersion": 1,
+      "position": [500, 100]
+    },
+    {
+      "id": "3",
+      "name": "OCR (Image)",
+      "type": "n8n-nodes-base.python",
+      "parameters": {
+        "functionCode": "from paddleocr import PaddleOCR\nocr = PaddleOCR()\nresult = ocr.ocr($json['file_path'], cls=True)\nextracted_text = ' '.join([line[1][0] for line in result[0]])\nreturn {'data': extracted_text}"
+      },
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "id": "4",
+      "name": "Audio to Text (Whisper)",
+      "type": "n8n-nodes-base.python",
+      "parameters": {
+        "functionCode": "import whisper\nmodel = whisper.load_model('small')\nresult = model.transcribe($json['file_path'])\nreturn {'data': result['text']}"
+      },
+      "typeVersion": 1,
+      "position": [500, 500]
+    },
+    {
+      "id": "5",
+      "name": "Chunking",
+      "type": "n8n-nodes-base.python",
+      "parameters": {
+        "functionCode": "import textwrap\ntext = $json['data']\nchunks = textwrap.wrap(text, 500)\nreturn [{'chunk': c} for c in chunks]"
+      },
+      "typeVersion": 1,
+      "position": [750, 200]
+    },
+    {
+      "id": "6",
+      "name": "Embedding (CLIP/SBERT)",
+      "type": "n8n-nodes-base.python",
+      "parameters": {
+        "functionCode": "from sentence_transformers import SentenceTransformer\nmodel = SentenceTransformer('all-MiniLM-L6-v2')\nembeddings = model.encode([$json['chunk']])\nreturn {'embedding': embeddings[0].tolist(), 'text': $json['chunk']}"
+      },
+      "typeVersion": 1,
+      "position": [950, 200]
+    },
+    {
+      "id": "7",
+      "name": "Store in ChromaDB",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "http://localhost:8000/add_embedding",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={\"embedding\": $json[\"embedding\"], \"text\": $json[\"text\"]}"
+      },
+      "typeVersion": 1,
+      "position": [1150, 200]
+    },
+    {
+      "id": "8",
+      "name": "User Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "http://localhost:5000/query",
+        "method": "POST"
+      },
+      "typeVersion": 1,
+      "position": [1350, 100]
+    },
+    {
+      "id": "9",
+      "name": "Retrieve Chunks from Chroma",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "http://localhost:8000/search",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={\"query\": $json[\"query\"], \"top_k\": 5}"
+      },
+      "typeVersion": 1,
+      "position": [1550, 100]
+    },
+    {
+      "id": "10",
+      "name": "LLM RAG Answer (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "http://localhost:11434/api/generate",
+        "method": "POST",
+        "jsonParameters": true,
+        "bodyParametersJson": "={\"model\":\"mistral\",\"prompt\":\"Answer the query using ONLY this context: {{$json[\"context\"]}} Query: {{$json[\"query\"]}}\"}"
+      },
+      "typeVersion": 1,
+      "position": [1750, 100]
+    }
+  ],
+  "connections": {}
+}
