@@ -210,7 +210,7 @@ def process_upload(
 #final 
 
 
-        chunks = chunk_text(text, CHUNK_SIZE, CHUNK_OVERLAP)
+        chunks = chunk_text_by_words(text, CHUNK_SIZE, CHUNK_OVERLAP)
         docs_to_index = []
 
         line_counter = 0
