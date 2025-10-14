@@ -63,6 +63,7 @@ def process_upload(
         elif mimetype.startswith("image") or ext in (".png", ".jpg", ".jpeg"):
             extracted = extract_text_from_image_bytes(file_bytes)
             text = extracted.get("text", "")
+            print(f"extracted: {text}")
         elif mimetype.startswith("audio") or ext in (".wav", ".mp3", ".m4a"):
             trans = transcribe_audio_bytes(file_bytes, whisper_model)
             extracted = {
@@ -81,19 +82,171 @@ def process_upload(
         # -------------------------------
         # 3️⃣ Chunk text
         # -------------------------------
-        chunks = chunk_text_by_words(text, CHUNK_SIZE, CHUNK_OVERLAP)
-        print(f"[DEBUG] Number of text chunks: {len(chunks)}")
+        # chunks = chunk_text_by_words(text, CHUNK_SIZE, CHUNK_OVERLAP)
+        # print(f"[DEBUG] Number of text chunks: {len(chunks)}")
 
+        # docs_to_index = []
+
+        # # -------------------------------
+        # # 4️⃣ Embed text chunks
+        # # -------------------------------
+        # for idx, chunk in enumerate(chunks):
+        #     embedding = embed_text(chunk)
+        #     if not embedding:
+        #         print(f"[WARN] Empty embedding for chunk {idx}")
+        #         continue
+
+        #     docs_to_index.append({
+        #         "id": f"{doc_id}_{idx}",
+        #         "embedding": embedding,
+        #         "payload": {
+        #             "text": chunk,
+        #             "filename": file.filename,
+        #             "doc_id": doc_id,
+        #             "chunk_index": idx,
+        #             "source_type": "text"
+        #         }
+        #     })
+
+#FOR PAGE NUMBERS
+        # chunks = chunk_text_by_words(text, CHUNK_SIZE, CHUNK_OVERLAP)
+        # print(f"[DEBUG] Number of text chunks: {len(chunks)}")
+
+        # docs_to_index = []
+
+        # # -------------------------------
+        # # 4️⃣ Embed text chunks
+        # # -------------------------------
+        # line_counter = 0  # global line counter for the document
+        # for idx, chunk in enumerate(chunks):
+        #     embedding = embed_text(chunk)
+        #     if not embedding:
+        #         print(f"[WARN] Empty embedding for chunk {idx}")
+        #         continue
+        #     # Determine page and line range for this chunk
+        #     chunk_start = line_counter
+        #     chunk_lines = chunk.split(". ")  # approximate: each sentence as a line
+        #     chunk_end = chunk_start + len(chunk_lines)
+
+        #     # Collect page and line info from pages data
+        #     # You can enhance this to find exact pages if needed
+        #     pages = extracted.get("pages", [])
+        #     pages_covered = []
+        #     for page in pages:
+        #         page_lines = [line['text'] for line in page['lines']]
+        #         if any(sentence in page_lines for sentence in chunk_lines):
+        #             pages_covered.append(page['page'])
+
+        #     docs_to_index.append({
+        #         "id": f"{doc_id}_{idx}",
+        #         "embedding": embedding,
+        #         "payload": {
+        #             "text": chunk,
+        #             "filename": file.filename,
+        #             "doc_id": doc_id,
+        #             "chunk_index": idx,
+        #             "source_type": "text",
+        #             "page_range": f"{pages_covered[0]}-{pages_covered[-1]}" if pages_covered else None,
+        #             "line_range": f"{chunk_start+1}-{chunk_end}",
+        #             "page_number": pages_covered[0] if pages_covered else None
+        #         }
+        #     })
+        #     line_counter = chunk_end  # update line counter for next chunk
+
+        # -------------------------------
+        # 5️⃣ Embed image globally (if applicable)
+        # -------------------------------
+
+#AUDIO TIMESTAMPS
+        # chunks = chunk_text_by_words(text, CHUNK_SIZE, CHUNK_OVERLAP)
+        # docs_to_index = []
+
+        # line_counter = 0
+
+        # for idx, chunk in enumerate(chunks):
+        #     embedding = embed_text(chunk)
+        #     if not embedding:
+        #         continue
+
+        #     chunk_lines = chunk.split(". ")  # approximate sentence splitting
+        #     chunk_end = line_counter + len(chunk_lines)
+
+        #     pages = extracted.get("pages", [])
+        #     pages_covered = []
+        #     for page in pages:
+        #         page_lines = [line['text'] for line in page.get("lines", [])]
+        #         if any(sentence in page_lines for sentence in chunk_lines):
+        #             pages_covered.append(page['page'])
+
+        #     # ---- AUDIO TIMESTAMPS ----
+        #     audio_start, audio_end = None, None
+        #     if "segments" in extracted:  # Only audio
+        #         for seg in extracted["segments"]:
+        #             if any(line in seg["text"] for line in chunk_lines):
+        #                 if audio_start is None or seg["start"] < audio_start:
+        #                     audio_start = seg["start"]
+        #                 if audio_end is None or seg["end"] > audio_end:
+        #                     audio_end = seg["end"]
+
+
+        #     docs_to_index.append({
+        #         "id": f"{doc_id}_{idx}",
+        #         "embedding": embedding,
+        #         "payload": {
+        #             "text": chunk,
+        #             "filename": file.filename,
+        #             "doc_id": doc_id,
+        #             "chunk_index": idx,
+        #             "source_type": "audio" if "segments" in extracted else "text",
+        #             "page_range": f"{pages_covered[0]}-{pages_covered[-1]}" if pages_covered else None,
+        #             "line_range": f"{line_counter+1}-{chunk_end}",
+        #             "page_number": pages_covered[0] if pages_covered else None,
+        #             "audio_start": audio_start,
+        #             "audio_end": audio_end
+        #         }
+        #     })
+        #     line_counter = chunk_end
+
+#final 
+
+
+        chunks = chunk_text(text, CHUNK_SIZE, CHUNK_OVERLAP)
         docs_to_index = []
 
-        # -------------------------------
-        # 4️⃣ Embed text chunks
-        # -------------------------------
+        line_counter = 0
+        pages = extracted.get("pages", [])
+
+# Build a global line->page map for text documents
+        line_to_page = {}
+        for page in pages:
+            for line in page.get("lines", []):
+                line_num = line["line_number"]
+                line_to_page[line_num] = page["page"]
+
         for idx, chunk in enumerate(chunks):
             embedding = embed_text(chunk)
             if not embedding:
-                print(f"[WARN] Empty embedding for chunk {idx}")
                 continue
+
+            chunk_lines = chunk.split(". ")  # approximate sentence splitting
+            chunk_start_line = line_counter + 1
+            chunk_end_line = line_counter + len(chunk_lines)
+
+            # Determine pages covered by line numbers
+            pages_covered = sorted({line_to_page.get(ln) for ln in range(chunk_start_line, chunk_end_line+1) if line_to_page.get(ln)})
+
+            # ---- AUDIO TIMESTAMPS ----
+            audio_start, audio_end = None, None
+            if "segments" in extracted:  # Only audio
+                # Find segments overlapping with chunk
+                for seg in extracted["segments"]:
+                    seg_text = seg["text"].strip()
+                    # naive: if any chunk line appears in segment
+                    if any(line.strip() in seg_text for line in chunk_lines):
+                        if audio_start is None or seg["start"] < audio_start:
+                            audio_start = seg["start"]
+                        if audio_end is None or seg["end"] > audio_end:
+                            audio_end = seg["end"]
 
             docs_to_index.append({
                 "id": f"{doc_id}_{idx}",
@@ -103,13 +256,17 @@ def process_upload(
                     "filename": file.filename,
                     "doc_id": doc_id,
                     "chunk_index": idx,
-                    "source_type": "text"
+                    "source_type": "audio" if "segments" in extracted else "text",
+                    "page_range": f"{pages_covered[0]}-{pages_covered[-1]}" if pages_covered else None,
+                    "line_range": f"{chunk_start_line}-{chunk_end_line}",
+                    "page_number": pages_covered[0] if pages_covered else None,
+                    "audio_start": audio_start,
+                    "audio_end": audio_end
                 }
             })
+            line_counter = chunk_end_line
 
-        # -------------------------------
-        # 5️⃣ Embed image globally (if applicable)
-        # -------------------------------
+
         if mimetype.startswith("image") or ext in (".png", ".jpg", ".jpeg"):
             try:
                 img_embedding = embed_image_bytes(file_bytes)
@@ -124,7 +281,7 @@ def process_upload(
                             "chunk_index": "image",
                             "source_type": "image"
                         }
-                    })
+                    }) 
             except Exception as e:
                 print(f"[WARN] Image embedding failed: {e}")
 

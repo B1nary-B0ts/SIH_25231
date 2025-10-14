@@ -45,7 +45,37 @@ except Exception:
 # -------------------------------
 # PDF Extraction
 # -------------------------------
-def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> Dict:
+# def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> Dict:
+#     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+#     pages = []
+#     full = []
+#     for i in range(len(doc)):
+#         page = doc.load_page(i)
+#         text = page.get_text().strip()
+#         if not text:
+#             pix = page.get_pixmap(dpi=200)
+#             img_bytes = pix.tobytes()
+#             text = ocr_image_bytes(img_bytes)
+#         pages.append({"page": i+1, "text": text, "char_count": len(text)})
+#         full.append(text)
+#     doc.close()
+#     return {"pages": pages, "text": "\n\n".join(full)}
+
+
+# # -------------------------------
+# # DOCX Extraction
+# # -------------------------------
+# def extract_text_from_docx_bytes(docx_bytes: bytes) -> Dict:
+#     doc = Document(io.BytesIO(docx_bytes))
+#     paras = [p.text for p in doc.paragraphs if p.text.strip()]
+#     text = "\n\n".join(paras)
+#     return {"pages":[{"page":1, "text":text, "char_count":len(text)}], "text": text}
+
+import re
+from docx import Document
+import fitz  # PyMuPDF
+
+def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> dict:
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     pages = []
     full = []
@@ -56,70 +86,110 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> Dict:
             pix = page.get_pixmap(dpi=200)
             img_bytes = pix.tobytes()
             text = ocr_image_bytes(img_bytes)
-        pages.append({"page": i+1, "text": text, "char_count": len(text)})
+
+        # Split text into sentences ending with a full stop for line numbers
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        lines_with_numbers = [{"line_number": idx+1, "text": line.strip()} 
+                              for idx, line in enumerate(sentences) if line.strip()]
+
+        pages.append({
+            "page": i+1,
+            "text": text,
+            "char_count": len(text),
+            "lines": lines_with_numbers
+        })
         full.append(text)
     doc.close()
     return {"pages": pages, "text": "\n\n".join(full)}
 
 
-# -------------------------------
-# DOCX Extraction
-# -------------------------------
-def extract_text_from_docx_bytes(docx_bytes: bytes) -> Dict:
+def extract_text_from_docx_bytes(docx_bytes: bytes) -> dict:
     doc = Document(io.BytesIO(docx_bytes))
     paras = [p.text for p in doc.paragraphs if p.text.strip()]
+
+    # Split paragraphs into sentences for line numbers
+    lines_with_numbers = []
+    line_counter = 1
+    for para in paras:
+        sentences = re.split(r'(?<=[.!?])\s+', para)
+        for sentence in sentences:
+            if sentence.strip():
+                lines_with_numbers.append({"line_number": line_counter, "text": sentence.strip()})
+                line_counter += 1
+
     text = "\n\n".join(paras)
-    return {"pages":[{"page":1, "text":text, "char_count":len(text)}], "text": text}
+    return {"pages": [{"page": 1, "text": text, "char_count": len(text), "lines": lines_with_numbers}],
+            "text": text}
+
 
 
 # -------------------------------
 # OCR Utilities
 # -------------------------------
+# def ocr_image_bytes(img_bytes: bytes) -> str:
+#     with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+#         tmp.write(img_bytes)
+#         tmp.flush()
+#         return ocr_image_file(tmp.name)
+
 def ocr_image_bytes(img_bytes: bytes) -> str:
-    with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         tmp.write(img_bytes)
         tmp.flush()
-        return ocr_image_file(tmp.name)
+        tmp_path = tmp.name
+
+    try:
+        return ocr_image_file(tmp_path)
+    finally:
+        import os
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 def ocr_image_file(path: str) -> str:
     text = ""
-    if _paddle:
+
+    # PaddleOCR for printed/machine text
+    if _paddle: 
         try:
-            res = _paddle.ocr(path, cls=True)
-            lines = [line[1][0] for block in res for line in block]
+            res = _paddle.predict(path, cls=True)  # remove redundant lang param
+            lines = [line[1][0] for block in res for line in block]  # flatten all lines
             text = " ".join(lines).strip()
+            print(res)
+            print(text)
             if text:
                 return text
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[WARN] PaddleOCR failed: {e}")
+
+
     if _easy_reader:
         try:
-            res = _easy_reader.readtext(path)
-            lines = [t for (_, t, _) in res]
-            text = " ".join(lines).strip()
+            res = _easy_reader.readtext(path)  # runs OCR on the image
+            lines = [t for (_, t, _) in res]  # extract only the recognized text part from each result
+            text = " ".join(lines).strip()   # combine all text into a single string
+            print(f"text: {text}")
             if text:
-                return text
+                return text                  # return the extracted text if any
         except Exception:
-            pass
-    if _tesseract:
-        try:
-            img = Image.open(path)
-            text = _tesseract.image_to_string(img).strip()
-            if text:
-                return text
-        except Exception:
-            pass
+            pass                               # ignore any errors
+
+
+    # TrOCR for handwritten
     if _trocr_processor and _trocr_model:
         try:
             img = Image.open(path).convert("RGB")
             pixel_values = _trocr_processor(images=img, return_tensors="pt").pixel_values
             generated_ids = _trocr_model.generate(pixel_values)
             generated_text = _trocr_processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+            print(generated_text)
             if generated_text.strip():
                 return generated_text.strip()
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[WARN] TrOCR failed: {e}")
+
     return text
+
 
 def extract_text_from_image_bytes(img_bytes: bytes) -> Dict:
     text = ocr_image_bytes(img_bytes)
@@ -129,29 +199,59 @@ def extract_text_from_image_bytes(img_bytes: bytes) -> Dict:
 # -------------------------------
 # Audio Transcription (WAV ONLY)
 # -------------------------------
+# def transcribe_audio_bytes(audio_bytes: bytes, whisper_model) -> dict:
+#     """
+#     Directly transcribe WAV audio bytes using Whisper.
+#     No ffmpeg / pydub needed.
+#     """
+#     if whisper_model is None:
+#         raise RuntimeError("No ASR model available.")
+
+#     tmp_path = None
+#     try:
+#         # Save WAV file temporarily
+#         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+#             tmp.write(audio_bytes)
+#             tmp.flush()
+#             tmp_path = tmp.name
+#             print(f"[DEBUG] Temp WAV path: {tmp_path}, size={os.path.getsize(tmp_path)} bytes")
+
+#         # Whisper transcription
+#         res = whisper_model.transcribe(tmp_path, task="translate")
+#         print(f"[DEBUG] Whisper transcription result: {res}")
+#         return {
+#             "text": res.get("text", ""),
+#             "segments": res.get("segments", []),
+#             "detected_language": res.get("language", "unknown")
+#         }
+#     finally:
+#         if tmp_path and os.path.exists(tmp_path):
+#             os.unlink(tmp_path)
+
+
 def transcribe_audio_bytes(audio_bytes: bytes, whisper_model) -> dict:
     """
-    Directly transcribe WAV audio bytes using Whisper.
-    No ffmpeg / pydub needed.
+    Transcribe WAV audio bytes using Whisper.
+    Returns text, segments, and timestamps.
     """
     if whisper_model is None:
         raise RuntimeError("No ASR model available.")
 
     tmp_path = None
     try:
-        # Save WAV file temporarily
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp.write(audio_bytes)
             tmp.flush()
             tmp_path = tmp.name
-            print(f"[DEBUG] Temp WAV path: {tmp_path}, size={os.path.getsize(tmp_path)} bytes")
 
-        # Whisper transcription
         res = whisper_model.transcribe(tmp_path, task="translate")
-        print(f"[DEBUG] Whisper transcription result: {res}")
+
+        segments = res.get("segments", [])
+        # Each segment has: start, end, text
+
         return {
             "text": res.get("text", ""),
-            "segments": res.get("segments", []),
+            "segments": segments,
             "detected_language": res.get("language", "unknown")
         }
     finally:

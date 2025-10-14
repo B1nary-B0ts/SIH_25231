@@ -7,7 +7,7 @@ import uuid
 from shapely import points
 
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "multimodal_docs")
+COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "documents")
 client = QdrantClient(url=QDRANT_URL.split("://")[-1] if "://" in QDRANT_URL else QDRANT_URL, prefer_grpc=False)
 
 # create collection if not exists
@@ -59,6 +59,6 @@ def search(query_vector, top_k=5):
             "id": hit.id,
             "score": hit.score,
             "text": hit.payload.get("text", ""),
-            "metadata": hit.payload.get("metadata", {})
+            "metadata": hit.payload
         })
     return out

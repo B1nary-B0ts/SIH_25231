@@ -72,8 +72,33 @@ def generate_with_local_llm(prompt: str) -> str:
     except Exception as e:
         return f"LLM error: {e}"
 
+# def synthesize(query: str, retrieved: List[Dict]) -> Dict:
+#     prompt = build_prompt(query, retrieved)
+#     answer = generate_with_local_llm(prompt)
+#     citations = [r["id"] for r in retrieved]
+#     return {"answer": answer, "citations": citations, "prompt": prompt}
+
 def synthesize(query: str, retrieved: List[Dict]) -> Dict:
     prompt = build_prompt(query, retrieved)
     answer = generate_with_local_llm(prompt)
-    citations = [r["id"] for r in retrieved]
-    return {"answer": answer, "citations": citations, "prompt": prompt}
+
+    citations = []
+    for r in retrieved:
+        payload = r.get("metadata") or r.get("payload", {})
+        citations.append({
+            "id": r["id"],
+            "filename": payload.get("filename"),
+            "page_range": payload.get("page_range"),
+            "page_number": payload.get("page_number"),
+            "line_range": payload.get("line_range"),
+            "file_path": f"http://127.0.0.1:8000/storage/{payload.get('doc_id')}{os.path.splitext(payload.get('filename') or '')[1]}" 
+            if payload.get("filename") and payload.get("doc_id") else None,
+            "audio_start": payload.get("audio_start"),
+            "audio_end": payload.get("audio_end")
+        })
+
+    return {
+        "answer": answer,
+        "citations": citations,
+        "prompt": prompt
+    }

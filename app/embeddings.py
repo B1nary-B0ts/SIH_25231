@@ -20,6 +20,20 @@ def get_text_model():
                 _text_model = SentenceTransformer(TEXT_EMBED_MODEL)
     return _text_model
 
+
+def embed_text(text: str):
+    model = get_text_model()
+    emb = model.encode([text], convert_to_numpy=True)[0].astype(np.float32)
+    # pad or truncate to VECTOR_DIM
+    if len(emb) < VECTOR_DIM:
+        pad = np.zeros(VECTOR_DIM - len(emb), dtype=np.float32)
+        emb = np.concatenate([emb, pad])
+    elif len(emb) > VECTOR_DIM:
+        emb = emb[:VECTOR_DIM]
+    # convert to plain list for Qdrant
+    return emb.tolist()
+
+
 def get_clip_model_and_preprocess():
     global _clip, _clip_preprocess, _clip_device
     if _clip is None:
@@ -37,17 +51,6 @@ def get_clip_model_and_preprocess():
                 _clip_device = device
     return _clip, _clip_preprocess, _clip_device
 
-def embed_text(text: str):
-    model = get_text_model()
-    emb = model.encode([text], convert_to_numpy=True)[0].astype(np.float32)
-    # pad or truncate to VECTOR_DIM
-    if len(emb) < VECTOR_DIM:
-        pad = np.zeros(VECTOR_DIM - len(emb), dtype=np.float32)
-        emb = np.concatenate([emb, pad])
-    elif len(emb) > VECTOR_DIM:
-        emb = emb[:VECTOR_DIM]
-    # convert to plain list for Qdrant
-    return emb.tolist()
 
 def embed_image_bytes(img_bytes: bytes):
     clip_model, preprocess, device = get_clip_model_and_preprocess()

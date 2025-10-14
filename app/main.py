@@ -6,8 +6,17 @@ from .ingest import process_upload
 from .retriever import retrieve
 from .synthesizer import synthesize
 from .models import IngestResponse, QueryRequest
-
+from fastapi.staticfiles import StaticFiles
+import os
 app = FastAPI(title="Multimodal RAG (Offline Prototype)")
+
+# Make sure STORAGE_DIR exists
+STORAGE_DIR = "storage"
+os.makedirs(STORAGE_DIR, exist_ok=True)
+
+# Mount storage folder
+app.mount("/storage", StaticFiles(directory=STORAGE_DIR), name="storage")
+
 
 @app.post("/ingest/upload", response_model=IngestResponse)
 async def upload_endpoint(file: UploadFile = File(...)):
