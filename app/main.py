@@ -1,4 +1,5 @@
 # app/main.py
+
 import os
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
@@ -8,7 +9,23 @@ from .synthesizer import synthesize
 from .models import IngestResponse, QueryRequest
 from fastapi.staticfiles import StaticFiles
 import os
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Multimodal RAG (Offline Prototype)")
+
+# 👇 Allow frontend origin (React)
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # allowed frontend URLs
+    allow_credentials=True,
+    allow_methods=["*"],    # allow all methods (GET, POST, etc.)
+    allow_headers=["*"],    # allow all headers
+)
 
 # Make sure STORAGE_DIR exists
 STORAGE_DIR = "storage"
