@@ -136,13 +136,12 @@ const ChatInterface = () => {
         className="flex justify-between items-center bg-white p-4 border-b border-gray-200 shadow-md"
       >
         <h2 className="text-lg sm:text-xl font-semibold text-[#234C6A] flex items-center gap-2">
-          💬 Raven Chat
+           Raven Chat
         </h2>
 
         <div className="flex items-center gap-4">
           <div className="flex flex-col items-end">
             <span className="text-sm sm:text-base font-medium text-gray-700">{username}</span>
-            <span className="text-xs text-gray-400">Online</span>
           </div>
 
           <motion.div
@@ -152,14 +151,14 @@ const ChatInterface = () => {
             <img src="ntro.jpeg" alt="User Avatar" className="w-full h-full object-cover" />
           </motion.div>
 
-          <motion.button
+          {/* <motion.button
             whileHover={{ scale: 1.05 }}
             onClick={handleLogout}
             className="flex items-center gap-1 bg-[#234C6A] text-white text-sm sm:text-base font-semibold px-3 py-1.5 rounded-full shadow-md hover:bg-[#1d3f59]"
           >
             <MdLogout size={18} />
             Logout
-          </motion.button>
+          </motion.button> */}
 
           <MdOutlineMoreVert className="text-2xl text-gray-400 cursor-pointer hover:text-gray-600" />
         </div>

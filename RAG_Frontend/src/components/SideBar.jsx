@@ -43,7 +43,7 @@ const Sidebar = () => {
 
   return (
     <motion.div
-      className="w-[340px] sm:w-[420px] max-w-full bg-white/90 backdrop-blur-md border-r border-gray-200 shadow-lg flex flex-col justify-between overflow-y-auto overflow-x-hidden"
+      className="w-[340px] sm:w-[420px] max-w-full bg-white/90 backdrop-blur-md border-r border-gray-200 shadow-lg flex flex-col justify-between overflow-y-auto overflow-x-hidden "
       initial={{ x: -100, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 70, damping: 12 }}
